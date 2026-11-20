@@ -1,0 +1,56 @@
+name: Publish portfolio backup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-backup.yml'
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: portfolio-backup-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Fetch current portfolio
+        uses: actions/checkout@v4
+        with:
+          repository: light-lad/design-portfolio
+          ref: main
+          path: site
+          persist-credentials: false
+      - name: Prepare independent backup address
+        run: |
+          rm -rf site/.git site/.github site/CNAME
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for page in Path('site').glob('*.html'):
+              html = page.read_text(encoding='utf-8')
+              html = html.replace('https://gr-design.site/',
+                                  'https://light-lad.github.io/design-portfolio-backup/')
+              html = html.replace('href="/favicon.svg"', 'href="favicon.svg"')
+              page.write_text(html, encoding='utf-8')
+          PY
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Publish site
+        id: deployment
+        uses: actions/deploy-pages@v4
